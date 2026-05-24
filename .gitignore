@@ -1,0 +1,9 @@
+*.db
+*.pyc
+__pycache__/
+.public_url
+*.log
+*.zip
+*.tar.gz
+.ngrok_token
+prox.log

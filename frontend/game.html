@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Proximity — Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{--pink:#ff6b9d;--purple:#a78bfa;--green:#34d399;--bg:#0a0118;--bg2:#1a0533;}
+  body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+  .glow{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;}
+  .g1{top:-80px;right:-80px;width:300px;height:300px;background:rgba(255,107,157,0.2);}
+  .g2{bottom:0;left:-80px;width:280px;height:280px;background:rgba(167,139,250,0.15);}
+  .card{position:relative;z-index:2;width:100%;max-width:400px;}
+  .back-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:8px 16px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;margin-bottom:24px;display:inline-block;}
+  .game-header{text-align:center;margin-bottom:28px;}
+  .game-title{font-size:28px;font-weight:800;margin-bottom:6px;}
+  .game-sub{font-size:14px;opacity:0.6;}
+  .turn-indicator{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:10px 20px;text-align:center;font-size:14px;font-weight:600;margin-bottom:20px;}
+  .turn-indicator.your-turn{border-color:var(--green);color:var(--green);background:rgba(52,211,153,0.1);}
+  .turn-indicator.their-turn{border-color:var(--purple);color:rgba(255,255,255,0.7);}
+
+  /* Tic tac toe board */
+  .board{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+  .cell{aspect-ratio:1;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.1);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:48px;cursor:pointer;transition:all 0.2s;font-family:'Instrument Serif',serif;font-style:italic;}
+  .cell:hover:not(.taken){background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.3);}
+  .cell.taken{cursor:default;}
+  .cell.x{color:var(--pink);border-color:rgba(255,107,157,0.4);background:rgba(255,107,157,0.08);}
+  .cell.o{color:var(--purple);border-color:rgba(167,139,250,0.4);background:rgba(167,139,250,0.08);}
+  .cell.win{animation:winner 0.5s ease forwards;}
+  @keyframes winner{0%{transform:scale(1);}50%{transform:scale(1.15);}100%{transform:scale(1.05);}}
+
+  /* Result */
+  .result{text-align:center;padding:24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:22px;margin-bottom:20px;display:none;}
+  .result.show{display:block;}
+  .result-emoji{font-size:56px;margin-bottom:10px;}
+  .result-title{font-size:26px;font-weight:800;margin-bottom:6px;}
+  .result-sub{font-size:14px;opacity:0.6;}
+  .btn-row{display:flex;gap:10px;}
+  .btn{flex:1;padding:14px;border-radius:16px;border:none;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:transform 0.2s;}
+  .btn:hover{transform:scale(1.02);}
+  .btn.primary{background:linear-gradient(135deg,var(--pink),var(--purple));color:#fff;}
+  .btn.secondary{background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);}
+
+  /* Waiting state */
+  .waiting{text-align:center;padding:40px 20px;}
+  .waiting-icon{font-size:48px;margin-bottom:12px;animation:bounce 1s ease-in-out infinite;}
+  @keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+</style>
+</head>
+<body>
+<div class="glow g1"></div>
+<div class="glow g2"></div>
+
+<div class="card">
+  <button class="back-btn" onclick="history.back()">← Back</button>
+
+  <div class="game-header">
+    <div class="game-title">⭕ Tic-Tac-Toe</div>
+    <div class="game-sub" id="game-sub">Loser buys coffee.</div>
+  </div>
+
+  <div id="waiting" class="waiting" style="display:none;">
+    <div class="waiting-icon">📡</div>
+    <p>Waiting for your match to join...</p>
+  </div>
+
+  <div id="game-area" style="display:none;">
+    <div class="turn-indicator" id="turn-indicator">Your turn ✨</div>
+    <div class="board" id="board">
+      <div class="cell" onclick="move(0)"></div>
+      <div class="cell" onclick="move(1)"></div>
+      <div class="cell" onclick="move(2)"></div>
+      <div class="cell" onclick="move(3)"></div>
+      <div class="cell" onclick="move(4)"></div>
+      <div class="cell" onclick="move(5)"></div>
+      <div class="cell" onclick="move(6)"></div>
+      <div class="cell" onclick="move(7)"></div>
+      <div class="cell" onclick="move(8)"></div>
+    </div>
+    <div class="result" id="result">
+      <div class="result-emoji" id="result-emoji">🎉</div>
+      <div class="result-title" id="result-title">You won!</div>
+      <div class="result-sub" id="result-sub"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="history.back()">Leave game</button>
+      <button class="btn primary" id="rematch-btn" onclick="rematch()" style="display:none;">Rematch →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const token  = localStorage.getItem('token');
+  const myId   = parseInt(localStorage.getItem('user_id'));
+  if (!token) window.location.href = '/login';
+
+  const params   = new URLSearchParams(location.search);
+  const targetId = parseInt(params.get('target'));
+  const gameId   = location.pathname.split('/').pop();
+  const myMark   = myId < targetId ? 'X' : 'O';
+  const theirMark= myMark==='X'?'O':'X';
+
+  let board = Array(9).fill('');
+  let myTurn = false;
+  let gameOver = false;
+  let ws = null;
+
+  document.getElementById('game-sub').textContent = `You are ${myMark} · They are ${theirMark}`;
+
+  function connectWS() {
+    const proto = location.protocol==='https:'?'wss':'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws/${myId}`);
+    ws.onopen = () => {
+      // Send invite if we're the initiator (lower ID)
+      if (myId < targetId) {
+        ws.send(JSON.stringify({type:'game_invite',target_id:targetId}));
+        document.getElementById('waiting').style.display='block';
+      } else {
+        startGame();
+      }
+    };
+    ws.onmessage = e => {
+      const d = JSON.parse(e.data);
+      if (d.type==='game_state' && d.game_id===gameId) {
+        updateBoard(d.board, d.turn, d.winner);
+      }
+      if (d.type==='game_invite') {
+        // The other person joined — start
+        startGame();
+      }
+    };
+    ws.onclose = () => setTimeout(connectWS, 2000);
+  }
+
+  function startGame() {
+    document.getElementById('waiting').style.display='none';
+    document.getElementById('game-area').style.display='block';
+    // First player (lower ID) goes first
+    myTurn = myId < targetId;
+    updateTurnIndicator();
+  }
+
+  function move(cell) {
+    if (!myTurn || board[cell] || gameOver) return;
+    if (ws?.readyState===1) {
+      ws.send(JSON.stringify({type:'game_move',game_id:gameId,cell}));
+    }
+  }
+
+  function updateBoard(newBoard, turn, winner) {
+    board = newBoard;
+    myTurn = (turn === myId);
+    gameOver = !!winner;
+
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach((cell,i) => {
+      cell.textContent = board[i] || '';
+      cell.className = 'cell' + (board[i]?' taken':'') + (board[i]==='X'?' x':board[i]==='O'?' o':'');
+    });
+
+    updateTurnIndicator();
+
+    if (winner) showResult(winner);
+  }
+
+  function updateTurnIndicator() {
+    const ind = document.getElementById('turn-indicator');
+    if (gameOver) return;
+    if (myTurn) {
+      ind.textContent = '✨ Your turn';
+      ind.className = 'turn-indicator your-turn';
+    } else {
+      ind.textContent = '⏳ Their turn...';
+      ind.className = 'turn-indicator their-turn';
+    }
+  }
+
+  function showResult(winner) {
+    const result = document.getElementById('result');
+    const emoji  = document.getElementById('result-emoji');
+    const title  = document.getElementById('result-title');
+    const sub    = document.getElementById('result-sub');
+    result.classList.add('show');
+    document.getElementById('turn-indicator').style.display='none';
+
+    if (winner==='draw') {
+      emoji.textContent='🤝'; title.textContent='Draw!'; sub.textContent='You\'re equally matched.';
+      result.style.borderColor='var(--yellow)';
+    } else {
+      const iWon = (winner==='X' && myMark==='X') || (winner==='O' && myMark==='O');
+      if (iWon) {
+        emoji.textContent='🎉'; title.textContent='You won!'; sub.textContent='Buy yourself a coffee.';
+        result.style.borderColor='var(--green)';
+      } else {
+        emoji.textContent='☕'; title.textContent='You lost!'; sub.textContent='Guess you\'re buying.';
+        result.style.borderColor='var(--pink)';
+      }
+    }
+    document.getElementById('rematch-btn').style.display='block';
+  }
+
+  function rematch() {
+    board = Array(9).fill('');
+    gameOver = false;
+    document.getElementById('result').classList.remove('show');
+    document.getElementById('turn-indicator').style.display='';
+    document.querySelectorAll('.cell').forEach(c=>{c.textContent='';c.className='cell';});
+    myTurn = myId < targetId;
+    updateTurnIndicator();
+    document.getElementById('rematch-btn').style.display='none';
+    // Notify server of new game
+    if (ws?.readyState===1) {
+      ws.send(JSON.stringify({type:'game_invite',target_id:targetId}));
+    }
+  }
+
+  connectWS();
+</script>
+</body>
+</html>

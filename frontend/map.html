@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Proximity — Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{--pink:#ff6b9d;--purple:#a78bfa;--green:#34d399;--bg:#0a0118;--bg2:#1a0533;}
+  body{font-family:'Space Grotesk',sans-serif;background:var(--bg);color:#fff;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+  .topbar{background:rgba(10,1,24,0.9);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.08);padding:14px 20px;display:flex;align-items:center;gap:14px;flex-shrink:0;}
+  .back-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:8px 14px;color:#fff;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;}
+  .topbar-title{font-size:16px;font-weight:700;}
+  .topbar-sub{font-size:12px;opacity:0.5;margin-left:auto;}
+
+  /* Map canvas */
+  .map-wrap{flex:1;position:relative;overflow:hidden;background:linear-gradient(135deg,#0f1428 0%,#1a0f33 100%);}
+  .grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:50px 50px;}
+
+  /* Pins */
+  .pin{position:absolute;display:flex;flex-direction:column;align-items:center;cursor:pointer;transform:translate(-50%,-50%);transition:transform 0.4s ease;}
+  .pin:hover{transform:translate(-50%,-50%) scale(1.1);}
+  .pin-circle{width:52px;height:52px;border-radius:50%;border:3px solid rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:26px;position:relative;}
+  .pin-circle::after{content:'';position:absolute;inset:-16px;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 70%);opacity:0.3;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:0.3;}50%{transform:scale(1.5);opacity:0.05;}}
+  .pin-label{margin-top:6px;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);padding:4px 10px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;}
+  .pin.you .pin-circle{background:var(--green);color:var(--green);}
+  .pin.match .pin-circle{background:var(--purple);color:var(--purple);}
+
+  /* Side panel */
+  .side-panel{position:absolute;right:16px;top:16px;display:flex;flex-direction:column;gap:10px;}
+  .panel-card{background:rgba(10,1,24,0.85);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:14px 16px;min-width:180px;cursor:pointer;transition:border-color 0.2s;}
+  .panel-card:hover{border-color:var(--purple);}
+  .panel-emoji{font-size:28px;margin-bottom:6px;}
+  .panel-name{font-weight:700;font-size:14px;}
+  .panel-dist{font-size:12px;color:var(--green);margin-top:2px;}
+  .panel-actions{display:flex;gap:6px;margin-top:10px;}
+  .panel-btn{flex:1;padding:7px;border-radius:10px;border:none;font-weight:600;font-size:11px;cursor:pointer;font-family:inherit;}
+  .panel-btn.chat{background:linear-gradient(135deg,var(--pink),var(--purple));color:#fff;}
+  .panel-btn.game{background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.15);}
+
+  /* No matches banner */
+  .no-matches{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;opacity:0.5;}
+  .no-matches-icon{font-size:48px;margin-bottom:12px;}
+
+  /* Bottom nav */
+  .bottom-nav{background:rgba(10,1,24,0.9);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-around;padding:12px 0 max(12px,env(safe-area-inset-bottom));flex-shrink:0;}
+  .nav-item{display:flex;flex-direction:column;align-items:center;gap:4px;color:rgba(255,255,255,0.4);text-decoration:none;font-size:11px;font-weight:600;cursor:pointer;}
+  .nav-item.active{color:var(--green);}
+  .nav-icon{font-size:22px;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button class="back-btn" onclick="history.back()">← Back</button>
+  <div>
+    <div class="topbar-title">Live Map</div>
+  </div>
+  <div class="topbar-sub" id="match-count-label">0 matches nearby</div>
+</div>
+
+<div class="map-wrap" id="map">
+  <div class="grid-overlay"></div>
+  <div id="pins"></div>
+  <div class="no-matches" id="no-matches" style="display:none;">
+    <div class="no-matches-icon">🗺️</div>
+    <p>No matches on the map yet.<br/>Go like some people nearby!</p>
+  </div>
+  <div class="side-panel" id="side-panel"></div>
+</div>
+
+<nav class="bottom-nav">
+  <a class="nav-item" href="/app"><span class="nav-icon">🔍</span>Nearby</a>
+  <a class="nav-item active"><span class="nav-icon">🗺️</span>Map</a>
+  <a class="nav-item" href="/app" onclick="sessionStorage.setItem('tab','matches')"><span class="nav-icon">💜</span>Matches</a>
+  <a class="nav-item" href="/app" onclick="sessionStorage.setItem('tab','profile')"><span class="nav-icon">👤</span>Profile</a>
+</nav>
+
+<script>
+  const token = localStorage.getItem('token');
+  const myId  = parseInt(localStorage.getItem('user_id'));
+  if (!token) window.location.href = '/login';
+  const headers = {'Content-Type':'application/json','Authorization':'Bearer '+token};
+
+  let me = null, matches = [], ws = null;
+  let myLat = 0, myLng = 0;
+  // Map state: pin positions as % of map dimensions
+  const pinPositions = {}; // uid → {x%, y%}
+
+  async function api(method, url, body) {
+    const r = await fetch(url, {method, headers, body: body?JSON.stringify(body):undefined});
+    return r.json();
+  }
+
+  function latLngToXY(lat, lng, refLat, refLng) {
+    // Convert relative position to map % coords (simple linear projection)
+    const map = document.getElementById('map');
+    const W = map.clientWidth, H = map.clientHeight;
+    const scale = 0.0001; // degrees per pixel at this zoom
+    let dx = (lng - refLng) / scale;
+    let dy = (lat - refLat) / scale;
+    let x = 50 + (dx / W) * 100;
+    let y = 50 - (dy / H) * 100;
+    // Clamp to 10-90%
+    x = Math.min(90, Math.max(10, x));
+    y = Math.min(90, Math.max(10, y));
+    return {x, y};
+  }
+
+  function renderPins() {
+    const container = document.getElementById('pins');
+    container.innerHTML = '';
+
+    // You pin
+    const youDiv = document.createElement('div');
+    youDiv.className = 'pin you';
+    youDiv.style.left = '50%'; youDiv.style.top = '50%';
+    youDiv.innerHTML = `<div class="pin-circle" style="color:var(--green)">📍</div><div class="pin-label" style="color:var(--green)">YOU</div>`;
+    container.appendChild(youDiv);
+
+    if (!matches.length) {
+      document.getElementById('no-matches').style.display = 'block';
+      return;
+    }
+    document.getElementById('no-matches').style.display = 'none';
+    document.getElementById('match-count-label').textContent = `${matches.length} match${matches.length===1?'':'es'} nearby`;
+
+    const panel = document.getElementById('side-panel');
+    panel.innerHTML = '';
+
+    matches.forEach((m, i) => {
+      const pos = pinPositions[m.user.id] || defaultPos(i, matches.length);
+      const pin = document.createElement('div');
+      pin.className = 'pin match';
+      pin.style.left = pos.x+'%'; pin.style.top = pos.y+'%';
+      pin.innerHTML = `<div class="pin-circle" style="color:var(--purple)">${m.user.emoji}</div><div class="pin-label">${m.user.name} · ${m.user.distance}</div>`;
+      pin.onclick = () => highlightPanel(m.match_id);
+      container.appendChild(pin);
+
+      // Side panel card
+      const card = document.createElement('div');
+      card.className = 'panel-card'; card.id = `panel-${m.match_id}`;
+      card.innerHTML = `
+        <div class="panel-emoji">${m.user.emoji}</div>
+        <div class="panel-name">${m.user.name}, ${m.user.age}</div>
+        <div class="panel-dist">📍 ${m.user.distance}</div>
+        <div class="panel-actions">
+          <button class="panel-btn game" onclick="startGame(${m.user.id})">🎮 Game</button>
+          <button class="panel-btn chat" onclick="window.location='/chat/${m.match_id}'">Chat →</button>
+        </div>
+      `;
+      panel.appendChild(card);
+    });
+  }
+
+  function defaultPos(i, total) {
+    const angles = [315, 45, 225, 135, 270, 90];
+    const angle = (angles[i % angles.length] * Math.PI) / 180;
+    const r = 25;
+    return {
+      x: 50 + r * Math.cos(angle),
+      y: 50 + r * Math.sin(angle)
+    };
+  }
+
+  function highlightPanel(matchId) {
+    document.querySelectorAll('.panel-card').forEach(c=>c.style.borderColor='');
+    const card = document.getElementById('panel-'+matchId);
+    if (card) { card.style.borderColor='var(--purple)'; card.scrollIntoView({behavior:'smooth'}); }
+  }
+
+  function startGame(targetId) {
+    if (ws && ws.readyState===1) {
+      ws.send(JSON.stringify({type:'game_invite',target_id:targetId}));
+      const gid = [Math.min(myId,targetId),Math.max(myId,targetId)].join('-');
+      window.location.href = `/game/${gid}?target=${targetId}`;
+    }
+  }
+
+  function connectWS() {
+    const proto = location.protocol==='https:'?'wss':'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws/${myId}`);
+    ws.onmessage = e => {
+      const d = JSON.parse(e.data);
+      if (d.type==='location_update') {
+        // Update pin position for matched user
+        if (myLat && myLng && d.lat && d.lng) {
+          pinPositions[d.user_id] = latLngToXY(d.lat, d.lng, myLat, myLng);
+          renderPins();
+        }
+      }
+      if (d.type==='game_invite') {
+        if (confirm(`Game invite from match! Accept?`))
+          window.location.href = `/game/${d.game_id}?target=${d.from}`;
+      }
+    };
+    ws.onclose = () => setTimeout(connectWS, 3000);
+  }
+
+  async function init() {
+    try {
+      [me, matches] = await Promise.all([api('GET','/api/me'), api('GET','/api/matches')]);
+      renderPins();
+      connectWS();
+      // Get location
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(pos => {
+          myLat = pos.coords.latitude;
+          myLng = pos.coords.longitude;
+          api('POST','/api/location',{lat:myLat,lng:myLng});
+          if (ws?.readyState===1) ws.send(JSON.stringify({type:'location',lat:myLat,lng:myLng}));
+          // Recompute pin positions
+          matches.forEach(m => {
+            if (m.user.lat && m.user.lng) {
+              pinPositions[m.user.id] = latLngToXY(m.user.lat, m.user.lng, myLat, myLng);
+            }
+          });
+          renderPins();
+        }, null, {enableHighAccuracy:true});
+      }
+    } catch { localStorage.clear(); window.location.href='/login'; }
+  }
+
+  init();
+  setInterval(async()=>{ matches = await api('GET','/api/matches'); renderPins(); }, 15000);
+</script>
+</body>
+</html>
